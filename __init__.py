@@ -9,10 +9,16 @@ from hoshino import Service
 from hoshino.util import pic2b64
 from hoshino.typing import CQEvent, HoshinoBot
 
+HELP = """
+今日小猪 - 抽取今天属于你的小猪
+随机小猪 - 从PigHub随机获取一张猪猪图
+找猪 + 关键词 - 从PigHub中搜索
+关键词相关的猪猪图片并发送（最多8张）
+"""
 sv = Service(
     "今天是什么小猪",
     enable_on_default=True,
-    help_="今日小猪 - 抽取今天属于你的小猪\n随机小猪 - 从PigHub随机获取一张猪猪图",
+    help_=HELP.strip(),
 )
 # 载入小猪信息
 PIG_LIST = load_json(PIGINFO_PATH, [])
@@ -31,6 +37,11 @@ async def auto_refresh_pig_data():
             logger.warning("PigHub 中找不到猪猪，未能刷新数据。")
     except Exception as e:
         logger.error(f"从PigHub中获取猪猪失败: {e}")
+
+
+@sv.on_fullmatch("今日小猪帮助")
+async def send_help(bot: HoshinoBot, ev: CQEvent):
+    await bot.send(ev, HELP.strip())
 
 
 @sv.on_fullmatch("刷新小猪")
@@ -89,3 +100,26 @@ async def send_today_pig(bot: HoshinoBot, ev: CQEvent):
     )
 
     await bot.send(ev, msg)
+
+
+@sv.on_prefix("找猪")
+async def find_pig(bot: HoshinoBot, ev: CQEvent):
+    data = load_json(PIG_HUB_PATH, {})
+    pig_images = data["images"]
+    if not pig_images:
+        await bot.finish("猪圈空荡荡...")
+        return
+
+    keyword = ev.message.extract_plain_text().strip()
+    found_pigs = [pig for pig in pig_images if keyword.lower() in pig["title"].lower()]
+
+    if not found_pigs:
+        await bot.finish(ev, "你要找的猪仔离家出走了~")
+
+    messages = []
+    count = min(len(found_pigs), 8)
+    for i in range(count):
+        pig = found_pigs[i]
+        image_url = "https://pighub.top/data/" + pig["thumbnail"].split("/")[-1]
+        messages.append(str(pig["title"] + MessageSegment.image(image_url)))
+    await bot.send(ev, "\n".join(messages))
